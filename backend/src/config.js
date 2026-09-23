@@ -38,10 +38,9 @@ if (tileCount === 0) {
     "INSERT INTO tiles (id, title, url, icon, kind, sort_order) VALUES (?,?,?,?,?,?)"
   );
   const defaults = [
-    ["Navigation", "https://maps.google.com", "map", "link"],
-    ["Plex", "http://plex.local:32400/web", "clapperboard", "link"],
-    ["Weather", "https://weather.com", "cloud-sun", "link"],
-    ["Game Streaming", "https://moonlight-stream.org", "gamepad-2", "link"],
+    ["Map", "https://www.openstreetmap.org/export/embed.html?bbox=-122.52%2C37.70%2C-122.35%2C37.83&layer=mapnik", "map", "link"],
+    ["Example", "https://example.com", "globe", "link"],
+    ["Plex (edit me)", "http://your-plex-server:32400/web", "clapperboard", "link"],
   ];
   defaults.forEach(([title, url, icon, kind], i) =>
     seed.run(nanoid(8), title, url, icon, kind, i)

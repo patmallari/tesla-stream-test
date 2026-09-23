@@ -218,7 +218,7 @@ export default function QuickSettingsDrawer({
             <p className="font-mono text-[11px] leading-relaxed text-ink-dim">
               {draft.kind === "stream"
                 ? "Register the source (RTSP/IPTV/HLS/file) as a stream from the relay's /api/streams endpoint first, then set the URL field here to that stream's id."
-                : "Opens in a box on this same page. Some sites (Google, most streaming/banking sites) refuse to load embedded like this — you'll get an \"open outside the box\" option if that happens."}
+                : "Opens in a box on this same page. A few sites known to always refuse this (Google, YouTube, Netflix, social media) skip straight to opening directly instead of showing a blank box. For anything else, there's an \"Open outside\" button if a site turns out to block embedding too."}
             </p>
 
             <div className="flex gap-2">

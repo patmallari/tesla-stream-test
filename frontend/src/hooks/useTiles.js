@@ -5,10 +5,37 @@ import { isRelayConfigured } from "../lib/relayConfig";
 const LOCAL_KEY = "dash:local-tiles";
 
 const DEFAULT_TILES = [
-  { id: "nav", title: "Navigation", url: "https://maps.google.com", icon: "map", kind: "link", sort_order: 0 },
-  { id: "plex", title: "Plex", url: "http://plex.local:32400/web", icon: "clapperboard", kind: "link", sort_order: 1 },
-  { id: "weather", title: "Weather", url: "https://weather.com", icon: "cloud-sun", kind: "link", sort_order: 2 },
-  { id: "moonlight", title: "Game Streaming", url: "https://moonlight-stream.org", icon: "gamepad-2", kind: "link", sort_order: 3 },
+  {
+    id: "nav",
+    title: "Map",
+    // OpenStreetMap explicitly supports being embedded like this — a real,
+    // working example rather than something that'll just sit blank.
+    url: "https://www.openstreetmap.org/export/embed.html?bbox=-122.52%2C37.70%2C-122.35%2C37.83&layer=mapnik",
+    icon: "map",
+    kind: "link",
+    sort_order: 0,
+  },
+  {
+    id: "example",
+    title: "Example",
+    // A plain, known-embeddable test page — tap it to confirm the box
+    // itself works before wiring up your real sites.
+    url: "https://example.com",
+    icon: "globe",
+    kind: "link",
+    sort_order: 1,
+  },
+  {
+    id: "plex",
+    title: "Plex (edit me)",
+    // Placeholder on purpose — replace with your actual server's reachable
+    // address (not a .local hostname, which only resolves on your home
+    // network) before this tile will do anything.
+    url: "http://your-plex-server:32400/web",
+    icon: "clapperboard",
+    kind: "link",
+    sort_order: 2,
+  },
 ];
 
 function loadLocal() {
