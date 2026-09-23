@@ -15,7 +15,11 @@ export default function App() {
     if (tile.kind === "stream") {
       setActiveStreamTile(tile);
     } else {
-      window.open(tile.url, "_blank", "noopener,noreferrer");
+      // Same-window navigation, on purpose: this is a single-browser car
+      // dashboard, not a multi-tab desktop setup. Use the browser's back
+      // button (or reopen this page's URL) to return — tiles persist in
+      // localStorage, so nothing is lost.
+      window.location.href = tile.url;
     }
   };
 

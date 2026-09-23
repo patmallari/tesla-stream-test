@@ -218,7 +218,7 @@ export default function QuickSettingsDrawer({
             <p className="font-mono text-[11px] leading-relaxed text-ink-dim">
               {draft.kind === "stream"
                 ? "Register the source (RTSP/IPTV/HLS/file) as a stream from the relay's /api/streams endpoint first, then set the URL field here to that stream's id."
-                : "Opens in a new tab — most sites refuse to load inside another page."}
+                : "Opens in this same window — use your browser's back button to return to the dashboard."}
             </p>
 
             <div className="flex gap-2">
