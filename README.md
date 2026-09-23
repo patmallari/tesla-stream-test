@@ -137,7 +137,13 @@ npm run dev
 
 - **Web link tiles** (Navigation, Plex, Weather, custom bookmarks): add them
   from the settings drawer (gear icon, top right) — title + URL is enough.
-  They open in a new tab, since most sites refuse to load inside an iframe.
+  They open in a box layered on top of this same page (an iframe), so the
+  dashboard itself never navigates away. **Caveat:** a number of sites —
+  Google properties, most streaming services, most banking sites — send a
+  header that refuses to let other pages embed them this way, and there's
+  no client-side workaround for that. When a tile is blocked like this, the
+  box shows an "open it outside the box instead" link after a few seconds,
+  which falls back to a normal same-window navigation for that one site.
 - **Video stream tiles**: first register the source with the relay:
 
   ```bash

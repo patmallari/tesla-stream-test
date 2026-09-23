@@ -1,27 +1,22 @@
 import { useState } from "react";
 import Dashboard from "./components/Dashboard";
 import PlayerScreen from "./components/PlayerScreen";
+import WebViewPanel from "./components/WebViewPanel";
 import QuickSettingsDrawer from "./components/QuickSettingsDrawer";
 import FullscreenHelpModal from "./components/FullscreenHelpModal";
 import { useTiles } from "./hooks/useTiles";
 
 export default function App() {
   const { tiles, addTile, updateTile, removeTile, reorderTiles } = useTiles();
-  const [activeStreamTile, setActiveStreamTile] = useState(null);
+  // The tile currently layered on top of the dashboard, or null. The
+  // dashboard underneath stays mounted the whole time — nothing navigates
+  // away from this page.
+  const [activeView, setActiveView] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const openTile = (tile) => {
-    if (tile.kind === "stream") {
-      setActiveStreamTile(tile);
-    } else {
-      // Same-window navigation, on purpose: this is a single-browser car
-      // dashboard, not a multi-tab desktop setup. Use the browser's back
-      // button (or reopen this page's URL) to return — tiles persist in
-      // localStorage, so nothing is lost.
-      window.location.href = tile.url;
-    }
-  };
+  const openTile = (tile) => setActiveView(tile);
+  const closeView = () => setActiveView(null);
 
   return (
     <div className="h-[100dvh] w-screen overflow-hidden bg-void">
@@ -32,8 +27,9 @@ export default function App() {
         onOpenHelp={() => setHelpOpen(true)}
       />
 
-      {activeStreamTile && (
-        <PlayerScreen tile={activeStreamTile} onBack={() => setActiveStreamTile(null)} />
+      {activeView?.kind === "stream" && <PlayerScreen tile={activeView} onBack={closeView} />}
+      {activeView && activeView.kind !== "stream" && (
+        <WebViewPanel tile={activeView} onBack={closeView} />
       )}
 
       <QuickSettingsDrawer
