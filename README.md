@@ -1,30 +1,45 @@
 # Tesla Dashboard
 
 A self-hosted, full-screen launcher dashboard built for the Chromium-based
-in-car browser on Tesla vehicles. It combines a tile-based app launcher
-(navigation, Plex, weather, game streaming, custom links) with a canvas-based
-video player that decodes a live transcoded stream without ever handing a
-native `<video>`/`<audio>` element to the browser — which is what stops
-Tesla's browser from pausing playback when the tab loses focus or the screen
-dims.
+in-car browser on Tesla vehicles. It's a tile-based app launcher where every
+tile — a link, a live camera, an app you don't control the headers of —
+opens and stays **inside this same page**. Nothing here ever navigates the
+Tesla browser away to load a tile; there is no `window.location.href =` or
+`window.open()` triggered automatically anywhere in this codebase.
+
+Two kinds of tiles, two rendering mechanisms:
+
+- **Video-stream tiles** decode a live transcoded feed onto an HTML5
+  `<canvas>` with audio through the Web Audio API — never a native
+  `<video>`/`<audio>` element, which is what stops Tesla's browser from
+  pausing playback when the tab loses focus or the screen dims.
+- **Link tiles** open inside the dashboard too. With the optional backend
+  configured, this uses a real headless browser tab on your server,
+  streamed here as video and driven by your taps — see
+  ["How link tiles actually render"](#how-link-tiles-actually-render) below
+  for why that's necessary and how it works.
 
 ```
 tesla-dashboard/
 ├── docker-compose.yml
-├── backend/          Node.js relay: Express API + WebSocket + ffmpeg transcoding
+├── backend/          Node.js relay: Express API + WebSocket + ffmpeg + Playwright
 │   └── src/
-│       ├── server.js         HTTP API + WS upgrade wiring
-│       ├── wsRelay.js        /ws/video/:streamId handler
-│       ├── streamManager.js  ref-counted ffmpeg process pool
-│       └── config.js         SQLite store for tiles + stream definitions
+│       ├── server.js           HTTP API + unified WS upgrade dispatch
+│       ├── wsRelay.js           /ws/video/:streamId (video-stream tiles)
+│       ├── streamManager.js     ref-counted ffmpeg process pool
+│       ├── wsBrowseRelay.js     /ws/browse (in-dashboard link-tile browsing)
+│       ├── browserSessions.js   Playwright/CDP headless-tab session pool
+│       └── config.js            SQLite store for tiles + stream definitions
 └── frontend/         Vite + React + Tailwind dashboard UI
     └── src/
         ├── components/
         │   ├── Dashboard.jsx, TileGrid.jsx, Tile.jsx
         │   ├── ConsoleHeader.jsx        clock / connection / weather strip
-        │   ├── QuickSettingsDrawer.jsx  add / edit / reorder tiles
+        │   ├── QuickSettingsDrawer.jsx  add / edit / reorder tiles, relay config
         │   ├── CanvasVideoPlayer.jsx    jsmpeg canvas + Web Audio player
-        │   ├── PlayerScreen.jsx         fullscreen video route
+        │   ├── PlayerScreen.jsx         fullscreen video-stream-tile route
+        │   ├── RemoteBrowserView.jsx    relay-backed in-dashboard browsing
+        │   ├── EmbeddedFrameView.jsx    zero-backend fallback (plain iframe)
         │   ├── FullscreenHelpModal.jsx  theater-mode help + QR share
         │   └── QRShare.jsx
         └── hooks/     useTiles, useClock, useConnectionStatus, useJsmpegLoader
@@ -46,17 +61,22 @@ means you can have it live and open it on the car in about a minute:
    add it to the home screen shortcuts (see "Launching it in the Tesla"
    below).
 
-At this point, link tiles (navigation, Plex, weather, custom bookmarks) work
-completely — add/edit/reorder them from the settings drawer (gear icon).
+At this point, link tiles work as a plain embedded box (see below for the
+full explanation) and video-stream tiles are the only thing still missing.
+Add/edit/reorder tiles from the settings drawer (gear icon).
 
-**Video-stream tiles are the one thing that still needs a real server**,
-because live transcoding runs `ffmpeg` continuously — that can't run on
-GitHub Pages' static hosting. To add it later without touching the deployed
-site or rebuilding anything:
+**Video-stream tiles, and reliable link-tile browsing, need a real server**
+— live transcoding runs `ffmpeg` continuously, and in-dashboard browsing of
+sites that block iframes runs a real headless browser tab, neither of which
+GitHub Pages' static hosting can do. To add that later without touching the
+deployed site or rebuilding anything:
 
 1. Run the backend relay somewhere with a persistent process — your home
    server, a small VPS, or any host that can run the provided Dockerfile
    (Railway, Render, Fly.io, etc. all build from a `Dockerfile` directly).
+   Note this backend now bundles a headless Chromium (via Playwright) in
+   addition to ffmpeg, so budget more RAM than a bare Node relay would need
+   — see ["How link tiles actually render"](#how-link-tiles-actually-render).
 2. **Put it behind HTTPS.** Your GitHub Pages dashboard is served over
    `https://`, so the browser will block plain `http://`/`ws://` calls to
    the relay as mixed content — this is a hard browser rule, not something
@@ -65,8 +85,8 @@ site or rebuilding anything:
    (no port forwarding, free TLS), a [Tailscale Funnel](https://tailscale.com/kb/1223/funnel),
    or a reverse proxy like [Caddy](https://caddyserver.com/) in front of the
    relay container, which issues certificates automatically.
-3. On the dashboard, open settings (gear icon) → **Video relay**, paste the
-   relay's `https://` address, tap **test**, then **Save & reload**. The
+3. On the dashboard, open settings (gear icon) → **Relay backend**, paste
+   the relay's `https://` address, tap **test**, then **Save & reload**. The
    config is stored in this browser only, so it survives every future
    GitHub Pages deploy with no rebuild.
 
@@ -124,6 +144,7 @@ once the container is up, the same way you would on GitHub Pages.
 # Terminal 1 — relay (requires system ffmpeg on PATH)
 cd backend
 npm install
+npx playwright install --with-deps chromium   # one-time, for in-dashboard browsing
 npm run dev
 
 # Terminal 2 — dashboard
@@ -133,17 +154,71 @@ npm install
 npm run dev
 ```
 
+## How link tiles actually render
+
+**The problem this solves:** a plain `<iframe>` keeps a site inside the
+dashboard page, but a number of sites — Google properties, most streaming
+and banking sites — send an `X-Frame-Options` or `Content-Security-Policy:
+frame-ancestors` header that refuses to let any other page embed them. That
+restriction is enforced by the browser itself (Tesla's Chromium included)
+on the destination site's explicit instruction, so there is no client-side
+trick — no different iframe attribute, no clever JavaScript — that
+overrides it from the embedding page's side. Stripping or rewriting those
+headers to force the embed anyway would mean defeating a security control
+another site deliberately put in place, which this project won't do.
+
+**The actual fix:** when the optional backend relay is configured, a link
+tile doesn't ask the Tesla browser to load the destination at all. Instead,
+the relay launches a real, independent headless Chromium tab (via
+[Playwright](https://playwright.dev)) on your server and visits the site
+there — a completely normal visit, indistinguishable from you opening it
+yourself. The relay then streams that tab to the dashboard as a sequence of
+JPEG frames over a WebSocket (`/ws/browse`), using the same Chrome DevTools
+Protocol screencast that browser-automation and remote-debugging tools use,
+and the dashboard renders those frames onto a `<canvas>` — architecturally
+the same pattern as the video-stream player, just driven by a live browser
+instead of ffmpeg. Taps, scrolls, and typed text on that canvas are relayed
+back and replayed as real input events (`page.mouse.click`,
+`page.mouse.wheel`, `page.keyboard.type`) on the actual server-side tab.
+
+Because the destination is never framed — there's no `<iframe>` involved
+in this path at all — `X-Frame-Options` and `frame-ancestors` simply don't
+apply. This is the same technique commercial "remote browser isolation"
+products (Zscaler, Menlo Security, Cloudflare's browser isolation, etc.)
+use for the opposite purpose — keeping a *risky* page's code off the
+viewer's machine — repurposed here to keep the *viewer* inside one page.
+
+**What this doesn't solve:** sites with separate bot-detection or DRM
+requirements (Netflix's video DRM, a login page behind a CAPTCHA challenge,
+Cloudflare's "verify you're human" interstitial) may still refuse or
+degrade for an automated browser, for reasons that have nothing to do with
+framing. This architecture fixes the framing problem specifically; it isn't
+a guarantee that literally any site works flawlessly.
+
+**Resource cost:** each open link tile is a real headless Chromium process
+on your server for as long as it's open — expect roughly 200–400MB of RAM
+per active tile, not the negligible cost of a plain iframe. `MAX_BROWSE_SESSIONS`
+(default `3`) caps how many can run at once; opening one more than that
+returns a clear in-app error instead of overloading the server. Idle
+sessions (no input for 10 minutes) close themselves automatically.
+
+**Without the backend configured:** there's no server available to run a
+headless tab, so link tiles fall back to a plain `<iframe>` — which still
+keeps the user inside the dashboard, and works for any site that doesn't
+send an anti-framing header. For a site that does, the box will appear
+blank; rather than pretend to detect that (there is no reliable way to,
+from the embedding page's side — see the code comments in
+`EmbeddedFrameView.jsx`), the dashboard shows an honest hint after a few
+seconds pointing at the relay-backed option, alongside an explicit,
+user-triggered **"Open outside"** button. That button is the only case in
+this app where the Tesla browser ever navigates away from the dashboard,
+and it only fires when tapped — never automatically.
+
 ## Adding tiles and streams
 
-- **Web link tiles** (Navigation, Plex, Weather, custom bookmarks): add them
-  from the settings drawer (gear icon, top right) — title + URL is enough.
-  They open in a box layered on top of this same page (an iframe), so the
-  dashboard itself never navigates away. **Caveat:** a number of sites —
-  Google properties, most streaming services, most banking sites — send a
-  header that refuses to let other pages embed them this way, and there's
-  no client-side workaround for that. When a tile is blocked like this, the
-  box shows an "open it outside the box instead" link after a few seconds,
-  which falls back to a normal same-window navigation for that one site.
+- **Web link tiles** (navigation, Plex, weather, custom bookmarks): add
+  them from the settings drawer (gear icon, top right) — title + URL is
+  enough. See the section above for exactly how these render.
 - **Video stream tiles**: first register the source with the relay:
 
   ```bash
@@ -181,6 +256,10 @@ npm run dev
 - Tile and stream config live in `backend/data/dashboard.sqlite`, mounted
   as a Docker volume so it survives container rebuilds. Back that file up
   if you've customized your layout.
+- `MAX_BROWSE_SESSIONS` (env var on the relay, default `3`) caps how many
+  concurrent in-dashboard browser tabs can run — each one is a real
+  headless Chromium process. Raise it only if your server has the RAM to
+  spare (roughly 200–400MB per active session).
 - The frontend also caches the last-fetched tile list to `localStorage`, so
   the dashboard still renders (read-only) if the relay is briefly
   unreachable — the connection indicator in the header will show
@@ -188,14 +267,17 @@ npm run dev
 - CORS is wide open (`CORS_ORIGIN=*`) by default for convenience on a home
   network. If you expose the relay beyond your LAN, set `CORS_ORIGIN` to
   your dashboard's real origin in `docker-compose.yml`.
-- This project assumes you have the legal right to the streams you point it
-  at (your own cameras, your own Plex server, IPTV sources you're licensed
-  to use, etc.) — it's a relay/transcoder, not a source of content.
+- This project assumes you have the legal right to the streams and sites
+  you point it at (your own cameras, your own Plex server, IPTV sources
+  you're licensed to use, sites you're authorized to browse, etc.) — it's a
+  relay and a personal remote-browsing tool, not a source of content and
+  not a way around any site's terms of service.
 
 ## Tech stack
 
 - **Backend:** Node.js, Express, `ws`, `fluent-ffmpeg` (system FFmpeg
-  required), `better-sqlite3`.
+  required), `better-sqlite3`, `playwright` (headless Chromium, for
+  in-dashboard link-tile browsing).
 - **Frontend:** React (Vite), Tailwind CSS, `lucide-react`, `qrcode`,
   jsmpeg (loaded at runtime from a CDN).
 - **Deployment:** Docker + Docker Compose, two containers (relay, dashboard

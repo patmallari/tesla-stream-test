@@ -3,22 +3,10 @@ import { StreamStore } from "./config.js";
 import { streamManager } from "./streamManager.js";
 
 // Matches /ws/video/:streamId — one muxed MPEG-TS (video+audio) socket per stream
-const ROUTE_RE = /^\/ws\/video\/([\w-]+)\/?$/;
+export const VIDEO_ROUTE_RE = /^\/ws\/video\/([\w-]+)\/?$/;
 
-export function attachWsRelay(httpServer) {
+export function createVideoWss() {
   const wss = new WebSocketServer({ noServer: true });
-
-  httpServer.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url, "http://localhost");
-    const match = url.pathname.match(ROUTE_RE);
-    if (!match) {
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit("connection", ws, req, { streamId: match[1] });
-    });
-  });
 
   wss.on("connection", (ws, _req, { streamId }) => {
     const streamCfg = StreamStore.get(streamId);

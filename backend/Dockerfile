@@ -10,6 +10,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+# Playwright's own Chromium build + the system libraries it needs (fonts,
+# GTK, etc.) for the in-dashboard remote-browser feature. This is a real,
+# separate headless browser process per active browse session — expect
+# noticeably more RAM/CPU use than the video relay alone.
+RUN npx playwright install --with-deps chromium
+
 COPY src ./src
 
 RUN mkdir -p /app/data /app/media

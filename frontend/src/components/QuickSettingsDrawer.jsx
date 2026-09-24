@@ -39,13 +39,14 @@ function RelaySettings() {
     <div className="mb-6 space-y-3 border-b border-line pb-6">
       <h3 className="flex items-center gap-2 font-mono text-xs uppercase text-ink-dim">
         <Server size={13} />
-        Video relay
+        Relay backend
       </h3>
       <p className="font-mono text-[11px] leading-relaxed text-ink-dim">
-        Only needed for video-stream tiles. Point this at wherever you're running the
-        backend relay (see the README) — for example{" "}
-        <span className="text-ink">https://relay.yourhome.example</span>. Leave it blank to run
-        this dashboard with link tiles only, stored in this browser.
+        Needed for video-stream tiles and for reliably browsing sites that don't allow being
+        embedded directly. Point this at wherever you're running the backend relay (see the
+        README) — for example <span className="text-ink">https://relay.yourhome.example</span>.
+        Leave it blank and link tiles still open inside the dashboard as a plain embedded box,
+        which works for plenty of sites — just not ones that actively block that.
       </p>
       <div className="flex gap-2">
         <input
@@ -218,7 +219,12 @@ export default function QuickSettingsDrawer({
             <p className="font-mono text-[11px] leading-relaxed text-ink-dim">
               {draft.kind === "stream"
                 ? "Register the source (RTSP/IPTV/HLS/file) as a stream from the relay's /api/streams endpoint first, then set the URL field here to that stream's id."
-                : "Opens in a box on this same page. A few sites known to always refuse this (Google, YouTube, Netflix, social media) skip straight to opening directly instead of showing a blank box. For anything else, there's an \"Open outside\" button if a site turns out to block embedding too."}
+                : "Opens inside the dashboard — the Tesla browser never navigates away. With the video relay configured (below), this runs the site in a real browser tab on your server and streams it here, so it works even for sites that block iframes. Without a relay, you'll see an explanation here instead of a blank screen, with an explicit \"Open outside\" option."}
+            </p>
+
+            <p className="font-mono text-[11px] leading-relaxed text-ink-faint">
+              Heavier than a plain link: each open link tile runs a real headless browser tab on
+              your server while it's in use.
             </p>
 
             <div className="flex gap-2">
